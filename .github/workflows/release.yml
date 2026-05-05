@@ -1,0 +1,61 @@
+name: Release NodeXtract
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger automatically when you push a new version tag (e.g., v1.0.0)
+  workflow_dispatch: # Allow triggering the workflow manually from the GitHub UI
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    permissions:
+      contents: write # Needed to upload files to GitHub Releases
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Linux requires additional dependencies to build electron and run playwright
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3-dev libgdk-pixbuf2.0-dev libgtk-3-dev libxss-dev libasound2
+
+      - name: Install Node Dependencies
+        run: npm install
+
+      # Rebuild native node modules for the current OS architecture
+      - name: Rebuild Native Modules
+        run: npm run rebuild
+
+      - name: Build Python Engine (Mac & Linux)
+        if: matrix.os != 'windows-latest'
+        run: npm run build:engine:mac
+
+      - name: Build Python Engine (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run build:engine:win
+
+      # This runs electron-builder and uploads the .dmg / .exe / .AppImage / latest.yml directly to GitHub
+      - name: Build & Publish Electron App
+        run: npm run package:ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
