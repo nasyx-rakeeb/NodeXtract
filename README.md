@@ -1,61 +1,81 @@
 # NodeXtract
 
-**NodeXtract** is an automated, cross-platform direct download link extractor built with Playwright and Electron. It handles complex, multi-step download flows (like those found on datanodes.to) to bypass ads, wait out fake progress bars, and intercept the final raw download URLs for batch exporting into your favorite Download Manager.
+**The professional, high-performance link resolver for Datanodes.**
 
-## Features
-- **Concurrent Extractions**: Extract multiple links simultaneously.
-- **Headless Mode**: Run the Playwright browsers silently in the background.
-- **Ad & Popup Bypass**: Automatically handles and closes aggressive popups and invisible ad overlays.
-- **Retry Mechanisms**: Configurable auto-retry logic for unreliable links.
-- **Batch Export**: 1-click "Copy All Links" utility to drop raw URLs directly into IDM or JDownloader.
+NodeXtract is a minimalist desktop utility designed to automate the tedious process of resolving `datanodes.to` links. Built with Electron and a custom Playwright engine, it bypasses ad-gateways, negotiates security tokens, and provides raw direct links ready for high-speed download managers.
 
-## For Users
+---
 
-### Installation
-Go to the [Releases](https://github.com/nasyx-rakeeb/NodeXtract/releases) page and download the installer for your OS (Windows `.exe`, Mac `.dmg` or Linux `AppImage`).
+## ⚡️ Key Features
 
-### Step 1: Extraction
-1. Paste your `datanodes.to` links into the text box (one per line). Unsupported links are automatically ignored.
-2. Tweak the Settings (Concurrency, Retries, Headless).
-3. Click **Start Extraction**.
-4. Once links start turning green, click **📋 Copy All Links** to grab the raw final URLs.
+- **Parallel Processing**: Resolve multiple links simultaneously with configurable concurrency.
+- **Stealth Engine**: Runs headless browser contexts to bypass ad-overlays and popups silently.
+- **Smart Retries**: Automatic error handling and retry logic for unreliable server responses.
+- **Enterprise UI**: A clean, distraction-free interface built for both casual and power users.
+- **Direct Export**: 1-click clipboard synchronization for seamless batch downloading.
 
-### Step 2: Downloading via IDM
-Datanodes checks browser tokens before serving files. You **cannot** paste these links directly into your download manager.
-1. Make sure you have **Internet Download Manager (IDM)** installed along with the **IDM Integration Module** browser extension.
-2. Install a browser extension like **Open Multiple URLs**.
-3. Paste the copied links into the "Open Multiple URLs" extension.
-4. **Important**: Open them in batches of 8. If you open too many at once, your browser may crash or timeouts may occur.
-5. The extension will open the links in new tabs, pass the token verification, and automatically trigger the IDM download interception!
+---
 
-## For Developers
+## 📥 Installation
 
-NodeXtract follows a hybrid architecture. The UI is built using React/Electron, while the extraction engine uses Python and Playwright. The engine is compiled into a standalone executable using PyInstaller.
+1. Navigate to the **[Latest Releases](https://github.com/nasyx-rakeeb/NodeXtract/releases)**.
+2. Download the installer for your platform:
+   - **Windows**: `.exe` installer
+   - **macOS**: `.dmg` package
+   - **Linux**: `.AppImage` executable
+3. Run the installer and launch **NodeXtract**.
 
-### Requirements
-- Node.js (v18+)
-- Python (3.9+)
+---
 
-### Project Structure
-- `src/`: React UI and Electron main process.
-- `engine/`: Python Playwright engine (`extractor.py`) and build scripts.
+## 🚀 The Optimal Workflow
 
-### Building the Python Engine
-Whenever you make changes to the Python logic (e.g., adding a new site handler), you must recompile the standalone binary.
-From the root directory, run:
-- **Mac/Linux**: `npm run build:engine:mac`
-- **Windows**: `npm run build:engine:win`
+Because Datanodes uses advanced session verification, you cannot simply paste extracted links directly into a download manager (like IDM) without a browser handshake. Follow this workflow for a 100% success rate:
 
-### Running Locally
-To test the UI and IPC bridge locally in development mode:
+### 1. Extraction
+1. Paste your list of `datanodes.to` URLs into the **Extraction** tab.
+2. Click **Start Extraction**.
+3. Watch the real-time terminal log as the engine negotiates the links.
+4. Once completed, click **Copy All Links**.
+
+### 2. Browser Handshake (Required)
+1. Install the **Internet Download Manager (IDM)** and its browser extension.
+2. Install the **"Open Multiple URLs"** extension in your browser.
+3. Open the extension, paste your links, and click **Open**.
+4. **Tip**: Open links in groups of 5-8 to ensure smooth token negotiation.
+5. Your browser will instantly verify the session, and IDM will automatically intercept the download!
+
+---
+
+## 🛠 Development
+
+NodeXtract utilizes a hybrid architecture: a **React/Electron** frontend communicating via IPC with a **Python/Playwright** backend.
+
+### Setup
 ```bash
+# Install dependencies
 npm install
+
+# Build the Python engine (Platform specific)
+npm run build:engine:mac  # or :win
+
+# Launch development environment
 npm start
 ```
 
-### Packaging for Production
-To build a distributable installer (e.g., `.exe` or `.dmg`) for the OS you are currently using:
+### Production Build
 ```bash
+# Generate platform-specific installers
 npm run package
 ```
-The output files will be placed in the `release/build` directory.
+
+---
+
+## 💖 Support the Project
+
+If NodeXtract has saved you time and frustration, consider supporting further development.
+
+- **[GitHub Sponsors](https://github.com/sponsors/nasyx-rakeeb)**
+
+---
+
+**Disclaimer**: NodeXtract is a tool designed for automation. Users are responsible for adhering to the terms of service of the file hosts they interact with.
