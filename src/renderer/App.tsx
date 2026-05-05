@@ -279,14 +279,13 @@ function MainApp() {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<{ type: string; version?: string; percent?: number; message?: string } | null>(null);
 
   const [concurrency, setConcurrency] = useState(5);
   const [retries, setRetries] = useState(3);
   const [headless, setHeadless] = useState(false);
 
   useEffect(() => {
-    const removeExtractionListener = window.electron.ipcRenderer.on('extraction-event', (data: any) => {
+    const removeListener = window.electron.ipcRenderer.on('extraction-event', (data: any) => {
       if (data.type === 'log') {
         setLogs((prev) => [...prev, { id: Date.now(), level: data.level || 'info', message: data.message }]);
       } else if (data.type === 'progress') {
@@ -306,17 +305,8 @@ function MainApp() {
       }
     });
 
-    const removeUpdateListener = window.electron.ipcRenderer.on('update-status', (data: any) => {
-      setUpdateInfo(data);
-      if (data.type === 'downloaded') {
-        // Automatically hide success message after 10 seconds
-        setTimeout(() => setUpdateInfo(null), 10000);
-      }
-    });
-
     return () => {
-      removeExtractionListener();
-      removeUpdateListener();
+      removeListener();
     };
   }, []);
 
@@ -357,24 +347,6 @@ function MainApp() {
 
   return (
     <div className="app-layout">
-      {updateInfo && (
-        <div className={`update-banner ${updateInfo.type}`}>
-          <div className="update-content">
-            {updateInfo.type === 'available' && <span>New version {updateInfo.version} is available. Downloading...</span>}
-            {updateInfo.type === 'progress' && (
-              <div className="update-progress-container">
-                <span>Downloading update... {Math.round(updateInfo.percent || 0)}%</span>
-                <div className="update-progress-bar">
-                  <div className="update-progress-fill" style={{ width: `${updateInfo.percent}%` }}></div>
-                </div>
-              </div>
-            )}
-            {updateInfo.type === 'downloaded' && <span>Version {updateInfo.version} ready. It will install on next restart.</span>}
-            {updateInfo.type === 'error' && <span className="update-error">Update error: {updateInfo.message}</span>}
-          </div>
-          <button className="close-banner" onClick={() => setUpdateInfo(null)}>✕</button>
-        </div>
-      )}
       <Sidebar />
       <div className="main-content">
         <Routes>
