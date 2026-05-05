@@ -11,13 +11,13 @@
     "automation",
     "downloader"
   ],
-  "homepage": "https://github.com/nasyx-rakeeb/nodextract#readme",
+  "homepage": "https://github.com/nasyx-rakeeb/NodeXtract#readme",
   "bugs": {
-    "url": "https://github.com/nasyx-rakeeb/nodextract/issues"
+    "url": "https://github.com/nasyx-rakeeb/NodeXtract/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nasyx-rakeeb/nodextract.git"
+    "url": "git+https://github.com/nasyx-rakeeb/NodeXtract.git"
   },
   "license": "MIT",
   "author": {

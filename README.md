@@ -12,7 +12,7 @@
 ## For Users
 
 ### Installation
-Go to the [Releases](https://github.com/nasyx-rakeeb/nodextract/releases) page and download the installer for your OS (Windows `.exe`, Mac `.dmg` or Linux `AppImage`).
+Go to the [Releases](https://github.com/nasyx-rakeeb/NodeXtract/releases) page and download the installer for your OS (Windows `.exe`, Mac `.dmg` or Linux `AppImage`).
 
 ### Step 1: Extraction
 1. Paste your `datanodes.to` links into the text box (one per line). Unsupported links are automatically ignored.
