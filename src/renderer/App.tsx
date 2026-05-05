@@ -356,7 +356,7 @@ function MainApp() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-layout">
       {updateInfo && (
         <div className={`update-banner ${updateInfo.type}`}>
           <div className="update-content">
@@ -375,14 +375,14 @@ function MainApp() {
           <button className="close-banner" onClick={() => setUpdateInfo(null)}>✕</button>
         </div>
       )}
-      <TopNav />
-      <main className="main-viewport">
+      <Sidebar />
+      <div className="main-content">
         <Routes>
           <Route path="/" element={<ExtractionView linksInput={linksInput} setLinksInput={setLinksInput} links={links} logs={logs} isRunning={isRunning} handleStart={handleStart} handleStop={handleStop} />} />
           <Route path="/settings" element={<SettingsView concurrency={concurrency} setConcurrency={setConcurrency} retries={retries} setRetries={setRetries} headless={headless} setHeadless={setHeadless} isRunning={isRunning} />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
-      </main>
+      </div>
     </div>
   );
 }
