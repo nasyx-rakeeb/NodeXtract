@@ -591,3 +591,75 @@ input:checked + .slider:before {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* Update Banner */
+.update-banner {
+  background-color: var(--accent-color);
+  color: white;
+  padding: 10px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: slideDown 0.3s ease-out;
+}
+
+.update-banner.error {
+  background-color: var(--danger-color);
+}
+
+.update-banner.downloaded {
+  background-color: var(--success-color);
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-grow: 1;
+}
+
+.update-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.update-progress-bar {
+  flex-grow: 1;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background-color: white;
+  transition: width 0.3s ease;
+}
+
+.close-banner {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.close-banner:hover {
+  opacity: 1;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+

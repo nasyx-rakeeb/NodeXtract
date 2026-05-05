@@ -23,14 +23,22 @@ class AppUpdater {
     autoUpdater.logger = log;
 
     autoUpdater.on('checking-for-update', () => log.info('AutoUpdater: Checking for update...'));
-    autoUpdater.on('update-available', (info) => log.info('AutoUpdater: Update available.', info));
+    autoUpdater.on('update-available', (info) => {
+      log.info('AutoUpdater: Update available.', info);
+      mainWindow?.webContents.send('update-status', { type: 'available', version: info.version });
+    });
     autoUpdater.on('update-not-available', (info) => log.info('AutoUpdater: Update not available.', info));
-    autoUpdater.on('error', (err) => log.error('AutoUpdater: Error in auto-updater.', err));
+    autoUpdater.on('error', (err) => {
+      log.error('AutoUpdater: Error in auto-updater.', err);
+      mainWindow?.webContents.send('update-status', { type: 'error', message: err.message });
+    });
     autoUpdater.on('download-progress', (progressObj) => {
       log.info(`AutoUpdater: Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`);
+      mainWindow?.webContents.send('update-status', { type: 'progress', percent: progressObj.percent });
     });
     autoUpdater.on('update-downloaded', (info) => {
       log.info('AutoUpdater: Update downloaded', info);
+      mainWindow?.webContents.send('update-status', { type: 'downloaded', version: info.version });
     });
 
     autoUpdater.checkForUpdatesAndNotify();
