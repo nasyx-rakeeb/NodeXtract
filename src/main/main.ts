@@ -11,10 +11,10 @@
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
-import MenuBuilder from './menu';
+
 import { resolveHtmlPath } from './util';
 
 class AppUpdater {
@@ -191,8 +191,7 @@ const createWindow = async () => {
     mainWindow = null;
   });
 
-  const menuBuilder = new MenuBuilder(mainWindow);
-  menuBuilder.buildMenu();
+  Menu.setApplicationMenu(null);
 
   // Open urls in the user's browser
   mainWindow.webContents.setWindowOpenHandler((edata) => {
