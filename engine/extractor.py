@@ -176,7 +176,7 @@ class ExtractorEngine:
         Logger.log("Starting Playwright...")
         
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless, channel="chrome")
+            browser = await p.chromium.launch(headless=self.headless)
             tasks = [asyncio.create_task(self.worker(browser, queue)) for _ in range(self.concurrency)]
             
             await queue.join()

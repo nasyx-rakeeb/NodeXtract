@@ -11,33 +11,245 @@
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
-import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  shell,
+  ipcMain,
+  Menu,
+  dialog,
+  type IpcMainEvent,
+} from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 
+import type {
+  EngineHealth,
+  ExportLinksPayload,
+  ExportLinksResult,
+  ExtractionEvent,
+  ImportLinksResult,
+  StartExtractionPayload,
+  UpdaterEvent,
+} from './preload';
 import { resolveHtmlPath } from './util';
 
+let mainWindow: BrowserWindow | null = null;
+
 class AppUpdater {
+  private latestEvent: UpdaterEvent = {
+    type: 'idle',
+    currentVersion: app.getVersion(),
+    message: 'Updates have not been checked yet.',
+  };
+
   constructor() {
     log.transports.file.level = 'info';
     autoUpdater.logger = log;
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = false;
 
-    autoUpdater.on('checking-for-update', () => log.info('AutoUpdater: Checking for update...'));
-    autoUpdater.on('update-available', (info) => log.info('AutoUpdater: Update available.', info));
-    autoUpdater.on('update-not-available', (info) => log.info('AutoUpdater: Update not available.', info));
-    autoUpdater.on('error', (err) => log.error('AutoUpdater: Error in auto-updater.', err));
+    autoUpdater.on('checking-for-update', () => {
+      log.info('AutoUpdater: Checking for update...');
+      this.emit({ type: 'checking', message: 'Checking for updates.' });
+    });
+    autoUpdater.on('update-available', (info) => {
+      log.info('AutoUpdater: Update available.', info);
+      this.emit({
+        type: 'available',
+        version: info.version,
+        message: `Version ${info.version} is available. Download will start automatically.`,
+      });
+    });
+    autoUpdater.on('update-not-available', (info) => {
+      log.info('AutoUpdater: Update not available.', info);
+      this.emit({
+        type: 'not-available',
+        version: info.version,
+        message: 'You are running the latest version.',
+      });
+    });
+    autoUpdater.on('error', (err) => {
+      log.error('AutoUpdater: Error in auto-updater.', err);
+      this.emit({
+        type: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
     autoUpdater.on('download-progress', (progressObj) => {
-      log.info(`AutoUpdater: Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`);
+      log.info(
+        `AutoUpdater: Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`,
+      );
+      this.emit({
+        type: 'downloading',
+        percent: progressObj.percent,
+        transferred: progressObj.transferred,
+        total: progressObj.total,
+        bytesPerSecond: progressObj.bytesPerSecond,
+        message: `Downloading update (${Math.round(progressObj.percent)}%).`,
+      });
     });
     autoUpdater.on('update-downloaded', (info) => {
       log.info('AutoUpdater: Update downloaded', info);
+      this.emit({
+        type: 'downloaded',
+        version: info.version,
+        message: 'Update downloaded. Restart to install.',
+      });
     });
+  }
 
-    autoUpdater.checkForUpdatesAndNotify();
+  emit(event: Omit<UpdaterEvent, 'currentVersion'>) {
+    this.latestEvent = {
+      currentVersion: app.getVersion(),
+      ...event,
+    };
+    mainWindow?.webContents.send('updater-event', this.latestEvent);
+  }
+
+  sendCurrentStatus() {
+    mainWindow?.webContents.send('updater-event', this.latestEvent);
+  }
+
+  checkForUpdates() {
+    if (!app.isPackaged) {
+      this.emit({
+        type: 'disabled',
+        message: 'Updates are available only in packaged builds.',
+      });
+      return;
+    }
+
+    autoUpdater.checkForUpdates().catch((err) => {
+      this.emit({
+        type: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  downloadUpdate() {
+    if (!app.isPackaged) {
+      this.emit({
+        type: 'disabled',
+        message: 'Updates are available only in packaged builds.',
+      });
+      return;
+    }
+
+    autoUpdater.downloadUpdate().catch((err) => {
+      this.emit({
+        type: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  quitAndInstall() {
+    if (this.latestEvent.type !== 'downloaded') {
+      this.emit({
+        type: 'error',
+        message: 'No downloaded update is ready to install.',
+      });
+      return;
+    }
+
+    autoUpdater.quitAndInstall(false, true);
   }
 }
 
-let mainWindow: BrowserWindow | null = null;
+let appUpdater: AppUpdater | null = null;
+
+const getEnginePath = () => {
+  const binName = process.platform === 'win32' ? 'extractor.exe' : 'extractor';
+
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'resources/bin', binName)
+    : path.join(app.getAppPath(), 'engine/extractor.py');
+};
+
+ipcMain.handle('links:import', async (): Promise<ImportLinksResult> => {
+  if (!mainWindow) return { canceled: true };
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import links',
+    properties: ['openFile'],
+    filters: [{ name: 'Text Files', extensions: ['txt'] }],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true };
+  }
+
+  const filePath = result.filePaths[0];
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const links = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    canceled: false,
+    filePath,
+    links,
+  };
+});
+
+ipcMain.handle(
+  'links:export',
+  async (_event, payload: ExportLinksPayload): Promise<ExportLinksResult> => {
+    if (!mainWindow) return { canceled: true };
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export ready links',
+      defaultPath: `nodextract-links-${new Date().toISOString().slice(0, 10)}.txt`,
+      filters: [{ name: 'Text Files', extensions: ['txt'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    fs.writeFileSync(result.filePath, payload.links.join('\n'), 'utf-8');
+
+    return {
+      canceled: false,
+      filePath: result.filePath,
+      count: payload.links.length,
+    };
+  },
+);
+
+ipcMain.handle('engine:get-health', async (): Promise<EngineHealth> => {
+  const enginePath = getEnginePath();
+
+  return {
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    packaged: app.isPackaged,
+    enginePath,
+    engineExists: fs.existsSync(enginePath),
+    browserMode: 'playwright-chromium',
+    browserNote:
+      'Uses Playwright managed Chromium; system Chrome is not required.',
+  };
+});
+
+ipcMain.on('update:get-status', () => {
+  appUpdater?.sendCurrentStatus();
+});
+
+ipcMain.on('update:check', () => {
+  appUpdater?.checkForUpdates();
+});
+
+ipcMain.on('update:download', () => {
+  appUpdater?.downloadUpdate();
+});
+
+ipcMain.on('update:install', () => {
+  appUpdater?.quitAndInstall();
+});
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
@@ -47,80 +259,135 @@ ipcMain.on('ipc-example', async (event, arg) => {
 
 let pythonProcess: ChildProcess | null = null;
 
-ipcMain.on('start-extraction', async (event, data: any) => {
-  if (pythonProcess) {
-    event.reply('extraction-event', { type: 'log', level: 'warn', message: 'Extraction is already running.' });
-    return;
+const defaultExtractionConfig = {
+  concurrency: 5,
+  retries: 3,
+  headless: false,
+};
+
+const replyExtractionEvent = (
+  event: IpcMainEvent,
+  payload: ExtractionEvent,
+) => {
+  event.reply('extraction-event', payload);
+};
+
+const normalizeStartPayload = (
+  payload: StartExtractionPayload | string[],
+): StartExtractionPayload => {
+  if (Array.isArray(payload)) {
+    return {
+      links: payload,
+      config: defaultExtractionConfig,
+    };
   }
 
-  const links = Array.isArray(data) ? data : data.links;
-  const config = Array.isArray(data) ? { concurrency: 5, retries: 3, headless: false } : (data.config || { concurrency: 5, retries: 3, headless: false });
+  return {
+    links: payload.links,
+    config: payload.config || defaultExtractionConfig,
+  };
+};
 
-  const tempFilePath = path.join(app.getPath('userData'), 'temp_links.json');
-  fs.writeFileSync(tempFilePath, JSON.stringify(links, null, 2), 'utf-8');
-  
-  const binName = process.platform === 'win32' ? 'extractor.exe' : 'extractor';
-  const extractorPath = app.isPackaged 
-    ? path.join(process.resourcesPath, 'resources/bin', binName)
-    : path.join(app.getAppPath(), 'engine/extractor.py');
-  
-  const args = [
-    '--input', tempFilePath,
-    '--concurrency', config.concurrency.toString(),
-    '--retries', config.retries.toString()
-  ];
-  if (config.headless) {
-    args.push('--headless');
-  }
-  
-  if (app.isPackaged) {
-    pythonProcess = spawn(extractorPath, args);
-  } else {
-    pythonProcess = spawn('python', ['-u', extractorPath, ...args]);
-  }
-  
-  let buffer = '';
-
-  pythonProcess.stdout?.on('data', (data) => {
-    buffer += data.toString();
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    
-    for (const line of lines) {
-      if (line.trim()) {
-        try {
-          const jsonEvent = JSON.parse(line);
-          event.reply('extraction-event', jsonEvent);
-        } catch (e) {
-          event.reply('extraction-event', { type: 'log', level: 'error', message: `Raw output: ${line}` });
-        }
-      }
+ipcMain.on(
+  'start-extraction',
+  async (event, payload: StartExtractionPayload | string[]) => {
+    if (pythonProcess) {
+      replyExtractionEvent(event, {
+        type: 'log',
+        level: 'warn',
+        message: 'Extraction is already running.',
+      });
+      return;
     }
-  });
 
-  pythonProcess.stderr?.on('data', (data) => {
-    event.reply('extraction-event', { type: 'log', level: 'error', message: data.toString() });
-  });
+    const { links, config } = normalizeStartPayload(payload);
 
-  pythonProcess.on('error', (err) => {
-    pythonProcess = null;
-    event.reply('extraction-event', { type: 'log', level: 'error', message: `Failed to start extractor: ${err.message}` });
-    event.reply('extraction-event', { type: 'done' });
-  });
+    const tempFilePath = path.join(app.getPath('userData'), 'temp_links.json');
+    fs.writeFileSync(tempFilePath, JSON.stringify(links, null, 2), 'utf-8');
 
-  pythonProcess.on('close', (code) => {
-    pythonProcess = null;
-    event.reply('extraction-event', { type: 'log', level: 'info', message: `Python process exited with code ${code}` });
-    event.reply('extraction-event', { type: 'done' });
-  });
-});
+    const extractorPath = getEnginePath();
+
+    const args = [
+      '--input',
+      tempFilePath,
+      '--concurrency',
+      config.concurrency.toString(),
+      '--retries',
+      config.retries.toString(),
+    ];
+    if (config.headless) {
+      args.push('--headless');
+    }
+
+    if (app.isPackaged) {
+      pythonProcess = spawn(extractorPath, args);
+    } else {
+      pythonProcess = spawn('python', ['-u', extractorPath, ...args]);
+    }
+
+    let buffer = '';
+
+    pythonProcess.stdout?.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      lines.forEach((line) => {
+        if (line.trim()) {
+          try {
+            const jsonEvent = JSON.parse(line);
+            replyExtractionEvent(event, jsonEvent as ExtractionEvent);
+          } catch {
+            replyExtractionEvent(event, {
+              type: 'log',
+              level: 'error',
+              message: `Raw output: ${line}`,
+            });
+          }
+        }
+      });
+    });
+
+    pythonProcess.stderr?.on('data', (chunk) => {
+      replyExtractionEvent(event, {
+        type: 'log',
+        level: 'error',
+        message: chunk.toString(),
+      });
+    });
+
+    pythonProcess.on('error', (err) => {
+      pythonProcess = null;
+      replyExtractionEvent(event, {
+        type: 'log',
+        level: 'error',
+        message: `Failed to start extractor: ${err.message}`,
+      });
+      replyExtractionEvent(event, { type: 'done' });
+    });
+
+    pythonProcess.on('close', (code) => {
+      pythonProcess = null;
+      replyExtractionEvent(event, {
+        type: 'log',
+        level: 'info',
+        message: `Python process exited with code ${code}`,
+      });
+      replyExtractionEvent(event, { type: 'done' });
+    });
+  },
+);
 
 ipcMain.on('stop-extraction', (event) => {
   if (pythonProcess) {
     pythonProcess.kill();
     pythonProcess = null;
-    event.reply('extraction-event', { type: 'log', level: 'warn', message: 'Extraction stopped by user.' });
-    event.reply('extraction-event', { type: 'done' });
+    replyExtractionEvent(event, {
+      type: 'log',
+      level: 'warn',
+      message: 'Extraction stopped by user.',
+    });
+    replyExtractionEvent(event, { type: 'done' });
   }
 });
 
@@ -199,9 +466,11 @@ const createWindow = async () => {
     return { action: 'deny' };
   });
 
-  // Remove this if your app does not use auto updates
-  // eslint-disable-next-line
-  new AppUpdater();
+  if (!appUpdater) {
+    appUpdater = new AppUpdater();
+  }
+  appUpdater.sendCurrentStatus();
+  appUpdater.checkForUpdates();
 };
 
 /**
