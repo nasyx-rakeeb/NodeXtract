@@ -497,14 +497,7 @@ function ExtractionView({
             >
               Copy Links
             </button>
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={handleExportReady}
-              disabled={successCount === 0}
-            >
-              Export Ready
-            </button>
+
           </div>
         </div>
 

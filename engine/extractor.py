@@ -2,6 +2,12 @@ import asyncio
 import urllib.parse
 import json
 import sys
+import os
+
+# Force Playwright to use the persistent global system cache
+# This prevents it from looking inside the ephemeral PyInstaller bundle folder
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
 import argparse
 import subprocess
 from playwright.async_api import async_playwright
