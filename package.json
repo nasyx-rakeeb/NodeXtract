@@ -1,6 +1,6 @@
 {
   "name": "nodextract",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "An automated cross-platform direct download link extractor built with Playwright and Electron.",
   "keywords": [
     "electron",
