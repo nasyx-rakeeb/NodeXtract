@@ -1,52 +1,148 @@
-# Product Documentation: NodeXtract
+# NodeXtract Product Notes
 
-## 1. The Problem: Why was NodeXtract created?
+This file explains what the app is, how it works, and what future changes should respect.
 
-File hosting services like **Datanodes** are heavily fortified with anti-automation mechanisms. For end-users attempting to download files, the experience is intentionally designed to be slow, tedious, and highly monetized. 
+## Product Goal
 
-When a user clicks a standard Datanodes link, they are forced through a hostile user experience:
-- **Ad Gateways**: Multiple invisible, full-screen popups that open scam or ad pages on the first 2-3 clicks.
-- **Artificial Delays**: Fake progress bars forcing the user to wait 10-15 seconds before the real download button appears.
-- **Session Tokens**: Download links are deeply tied to the user's active browser session and IP address, meaning direct links cannot easily be scraped via basic HTTP requests (like `cURL` or `Python Requests`).
-- **CAPTCHAs / Bot Protection**: Cloudflare and standard bot-checks constantly block automated traffic.
+NodeXtract is a desktop utility for preparing supported file-host links.
 
-For a user trying to download dozens or hundreds of files, manually clicking through this maze for every single link is physically exhausting and incredibly time-consuming.
+The app should make a repetitive workflow easier:
 
-## 2. The Solution: What is NodeXtract?
+1. User pastes supported source links.
+2. App processes them in a visible queue.
+3. App marks links as ready or failed.
+4. User copies or exports ready links.
+5. User opens ready links in their regular browser.
 
-**NodeXtract** is a premium, cross-platform desktop automation utility designed to completely eliminate the friction of downloading from Datanodes. 
+The app should feel simple for normal users and predictable for developers.
 
-Instead of treating extraction like a simple web-scraping task, NodeXtract uses a "stealth browser" approach. It spins up invisible instances of the Chromium browser, mimics human behavior, safely absorbs all the malicious popups, waits out the timers, and securely negotiates the session tokens on the user's behalf. 
+## Main Screens
 
-**It turns a 15-minute manual clicking chore into a 1-click automated background process.**
+### Extraction
 
-## 3. How It Works (The Architecture)
+Primary working screen.
 
-NodeXtract is built on a modern, hybrid architecture designed for performance and reliability:
+It should show:
 
-### A. The Frontend (React + Electron)
-The user interface is built using React and packaged as a native desktop application via Electron. 
-- **Minimalist Design**: Inspired by enterprise developer tools (like Vercel and Linear), providing a stark, distraction-free environment.
-- **State Management**: Tracks the real-time status of dozens of links simultaneously (Pending, Opening, Intercepting, Success, Failed).
-- **Configuration**: Allows the user to dictate the Concurrency (how many browsers run at once), Retry logic, and Headless modes.
+- Link input box.
+- Start, stop, import, retry, copy, and export actions.
+- Queue metrics: queued, active, ready, failed.
+- Engine log.
+- Queue table with source URL, status, and result.
 
-### B. The Backend Engine (Python + Playwright)
-When the user clicks "Start Extraction", the Electron app boots up a compiled Python executable bundled inside the app. 
-- **Playwright Automation**: The engine uses Playwright to physically drive hidden Chromium browsers.
-- **Ad-Block Routing**: The Python script is programmed to intercept and instantly abort any network requests heading to known ad networks or popup domains, saving massive amounts of bandwidth and memory.
-- **DOM Observation**: It intelligently waits for specific HTML elements (like the hidden `download_token` buttons) to appear, rather than relying on unreliable static sleep timers.
-- **Network Interception**: Once the final file is requested, the engine intercepts the raw `.mkv` or `.zip` network payload, steals the direct URL, and aborts the actual download, returning the raw link back to the React UI.
+Expected behavior:
 
-## 4. The "Open Multiple URLs" Handoff
+- Ignore unsupported links before extraction starts.
+- Remove duplicate supported links before extraction starts.
+- Show a clear message when input was cleaned.
+- Keep source URLs readable in the queue table.
+- Autoscroll the queue when new links become ready.
 
-Because Datanodes uses strict session verification, raw links cannot be blindly pasted into a tool like Internet Download Manager (IDM). The server will reject the connection if it doesn't recognize the browser that generated the link.
+### Settings
 
-NodeXtract solves this with a highly optimized handoff workflow:
-1. The user copies the final raw links from NodeXtract.
-2. They use a browser extension ("Open Multiple URLs") to open the links in their actual daily browser.
-3. The browser instantly completes the token handshake with the Datanodes server.
-4. **IDM's browser extension** seamlessly intercepts the validated connection and takes over the download at maximum bandwidth.
+User preferences and engine controls.
 
-## 5. Summary
+Current settings:
 
-NodeXtract is not just a scraper; it is a **Browser Automation Engine** wrapped in a sleek, billion-dollar-company UI. It respects the user's time, CPU, and bandwidth, bridging the gap between highly-defended file hosts and enterprise download managers.
+- Theme: light or dark.
+- Concurrency.
+- Max retries.
+- Headless mode.
+- Development engine mode in dev builds only.
+
+Settings must persist across app restarts.
+
+### Guide
+
+User-facing workflow help.
+
+The guide should be explicit and practical. It should explain:
+
+- What a ready link is.
+- Why ready links should be opened in the user's regular browser.
+- How to use Copy Ready and Export Ready.
+- The Open Multiple URLs browser extension tip.
+
+Avoid vague wording. Use the same button names shown in the UI.
+
+### About
+
+Project information.
+
+It should include:
+
+- Short app description.
+- Useful capability summary.
+- Responsible use disclaimer.
+- GitHub link.
+- GitHub Issues link.
+- GitHub Sponsors link.
+
+## Architecture
+
+NodeXtract has three major parts.
+
+### Electron Main Process
+
+Location: `src/main`
+
+Responsibilities:
+
+- Create the app window.
+- Maximize the window on startup.
+- Start and stop the engine process.
+- Import and export text files.
+- Handle auto updates.
+- Open external links in the user's browser.
+
+### React Renderer
+
+Location: `src/renderer`
+
+Responsibilities:
+
+- Render the app UI.
+- Store user settings and session data in local storage.
+- Validate and clean input links.
+- Display queue status, logs, and result links.
+- Send extraction requests to the main process through IPC.
+
+### Python Engine
+
+Location: `engine`
+
+Responsibilities:
+
+- Run Playwright.
+- Process supported links.
+- Emit JSON events for logs, progress, results, and completion.
+
+The renderer should not parse raw engine text when structured events are available.
+
+## Development Engine Modes
+
+In development builds, Settings can choose between:
+
+- **Script**: run `engine/extractor.py` through Python.
+- **Binary**: run the built executable from `resources/bin`.
+
+Packaged builds always use the binary.
+
+This helps test production-like behavior without packaging the full app.
+
+## Release Checklist
+
+Before a release:
+
+1. Run the app locally.
+2. Test extraction with valid, invalid, and duplicate input.
+3. Check dark mode and light mode.
+4. Check import, Copy Ready, Export Ready, and Retry Failed.
+5. Build the engine for the target platform.
+6. Run `npm run build`.
+7. Run `npm run package`.
+8. Update version, commit, push, tag, and push the tag.
+
+## Responsible Use
+
+NodeXtract is an automation utility. Users must only use it with links, files, and services they are authorized to access. Users are responsible for following any applicable service terms, content rights, and local laws.

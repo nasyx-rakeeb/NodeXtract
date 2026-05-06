@@ -41,7 +41,7 @@ class Logger:
         Logger.emit("result", **kwargs)
 
 
-class DatanodesHandler:
+class HostLinkHandler:
     BUTTON_CONTINUE = "button:has-text('Continue to Download')"
     BUTTON_FREE = "button:has-text('Free Download')"
     BUTTON_START = "button:has-text('Start Download')"
@@ -148,7 +148,7 @@ class ExtractorEngine:
             Logger.log(f"Failed to verify browsers: {e}", level="warning")
 
     async def worker(self, browser, queue):
-        handler = DatanodesHandler(browser)
+        handler = HostLinkHandler(browser)
         while True:
             link = await queue.get()
             if link is None:

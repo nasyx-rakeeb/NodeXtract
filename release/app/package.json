@@ -1,7 +1,7 @@
 {
   "name": "nodextract",
-  "version": "1.0.1",
-  "description": "An automated cross-platform direct download link extractor built with Playwright and Electron.",
+  "version": "1.0.4",
+  "description": "A cross-platform desktop utility for preparing supported file-host links.",
   "license": "MIT",
   "author": {
     "name": "nasyx-rakeeb",

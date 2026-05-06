@@ -29,10 +29,13 @@ export type LinkStatus =
 
 export type LogLevel = 'info' | 'warn' | 'warning' | 'error';
 
+export type DevEngineMode = 'script' | 'binary';
+
 export type ExtractionConfig = {
   concurrency: number;
   retries: number;
   headless: boolean;
+  devEngineMode?: DevEngineMode;
 };
 
 export type StartExtractionPayload = {
@@ -112,6 +115,7 @@ export type EngineHealth = {
   packaged: boolean;
   enginePath: string;
   engineExists: boolean;
+  engineMode: DevEngineMode;
   browserMode: 'playwright-chromium';
   browserNote: string;
 };
@@ -135,7 +139,7 @@ type ListenPayloadByChannel = {
 type InvokePayloadByChannel = {
   'links:import': [];
   'links:export': [ExportLinksPayload];
-  'engine:get-health': [];
+  'engine:get-health': [{ devEngineMode?: DevEngineMode }?];
 };
 
 type InvokeResultByChannel = {

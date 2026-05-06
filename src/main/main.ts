@@ -24,6 +24,7 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 
 import type {
+  DevEngineMode,
   EngineHealth,
   ExportLinksPayload,
   ExportLinksResult,
@@ -160,12 +161,23 @@ class AppUpdater {
 
 let appUpdater: AppUpdater | null = null;
 
-const getEnginePath = () => {
+const getBundledEnginePath = () => {
   const binName = process.platform === 'win32' ? 'extractor.exe' : 'extractor';
 
   return app.isPackaged
     ? path.join(process.resourcesPath, 'resources/bin', binName)
-    : path.join(app.getAppPath(), 'engine/extractor.py');
+    : path.join(app.getAppPath(), 'resources/bin', binName);
+};
+
+const getScriptEnginePath = () =>
+  path.join(app.getAppPath(), 'engine/extractor.py');
+
+const getEnginePath = (devEngineMode: DevEngineMode = 'script') => {
+  if (app.isPackaged || devEngineMode === 'binary') {
+    return getBundledEnginePath();
+  }
+
+  return getScriptEnginePath();
 };
 
 ipcMain.handle('links:import', async (): Promise<ImportLinksResult> => {
@@ -220,20 +232,30 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle('engine:get-health', async (): Promise<EngineHealth> => {
-  const enginePath = getEnginePath();
+ipcMain.handle(
+  'engine:get-health',
+  async (
+    _event,
+    options?: { devEngineMode?: DevEngineMode },
+  ): Promise<EngineHealth> => {
+    const engineMode = app.isPackaged
+      ? 'binary'
+      : options?.devEngineMode || 'script';
+    const enginePath = getEnginePath(engineMode);
 
-  return {
-    appVersion: app.getVersion(),
-    platform: process.platform,
-    packaged: app.isPackaged,
-    enginePath,
-    engineExists: fs.existsSync(enginePath),
-    browserMode: 'playwright-chromium',
-    browserNote:
-      'Uses Playwright managed Chromium; system Chrome is not required.',
-  };
-});
+    return {
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      packaged: app.isPackaged,
+      enginePath,
+      engineExists: fs.existsSync(enginePath),
+      engineMode,
+      browserMode: 'playwright-chromium',
+      browserNote:
+        'Uses Playwright managed Chromium; system Chrome is not required.',
+    };
+  },
+);
 
 ipcMain.on('update:get-status', () => {
   appUpdater?.sendCurrentStatus();
@@ -263,6 +285,7 @@ const defaultExtractionConfig = {
   concurrency: 5,
   retries: 3,
   headless: false,
+  devEngineMode: 'script' as DevEngineMode,
 };
 
 const replyExtractionEvent = (
@@ -305,7 +328,9 @@ ipcMain.on(
     const tempFilePath = path.join(app.getPath('userData'), 'temp_links.json');
     fs.writeFileSync(tempFilePath, JSON.stringify(links, null, 2), 'utf-8');
 
-    const extractorPath = getEnginePath();
+    const devEngineMode =
+      config.devEngineMode || defaultExtractionConfig.devEngineMode;
+    const extractorPath = getEnginePath(devEngineMode);
 
     const args = [
       '--input',
@@ -319,7 +344,7 @@ ipcMain.on(
       args.push('--headless');
     }
 
-    if (app.isPackaged) {
+    if (app.isPackaged || devEngineMode === 'binary') {
       pythonProcess = spawn(extractorPath, args);
     } else {
       pythonProcess = spawn('python', ['-u', extractorPath, ...args]);
@@ -450,6 +475,7 @@ const createWindow = async () => {
     if (process.env.START_MINIMIZED) {
       mainWindow.minimize();
     } else {
+      mainWindow.maximize();
       mainWindow.show();
     }
   });

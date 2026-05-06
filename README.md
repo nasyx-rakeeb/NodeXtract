@@ -1,81 +1,114 @@
 # NodeXtract
 
-**The professional, high-performance link resolver for Datanodes.**
+NodeXtract is a desktop app for preparing supported file-host links and managing them in a clean queue.
 
-NodeXtract is a minimalist desktop utility designed to automate the tedious process of resolving `datanodes.to` links. Built with Electron and a custom Playwright engine, it bypasses ad-gateways, negotiates security tokens, and provides raw direct links ready for high-speed download managers.
+Paste supported links, run extraction, copy or export the ready links, then open them in your browser.
 
----
+## What You Can Do
 
-## ⚡️ Key Features
+- Paste many supported links at once.
+- Track each link as it moves from pending to ready or failed.
+- Retry failed links.
+- Copy all ready links to the clipboard.
+- Export ready links to a `.txt` file.
+- Import links from a `.txt` file.
+- Use dark mode.
+- Let the app check for updates in packaged builds.
 
-- **Parallel Processing**: Resolve multiple links simultaneously with configurable concurrency.
-- **Stealth Engine**: Runs headless browser contexts to bypass ad-overlays and popups silently.
-- **Smart Retries**: Automatic error handling and retry logic for unreliable server responses.
-- **Enterprise UI**: A clean, distraction-free interface built for both casual and power users.
-- **Direct Export**: 1-click clipboard synchronization for seamless batch downloading.
+## Install
 
----
+Download the latest build from:
 
-## 📥 Installation
+https://github.com/nasyx-rakeeb/NodeXtract/releases
 
-1. Navigate to the **[Latest Releases](https://github.com/nasyx-rakeeb/NodeXtract/releases)**.
-2. Download the installer for your platform:
-   - **Windows**: `.exe` installer
-   - **macOS**: `.dmg` package
-   - **Linux**: `.AppImage` executable
-3. Run the installer and launch **NodeXtract**.
+Choose the file for your operating system:
 
----
+- Windows: `.exe`
+- macOS: `.dmg`
+- Linux: `.AppImage`
 
-## 🚀 The Optimal Workflow
+Install it, open NodeXtract, and start from the Extraction page.
 
-Because Datanodes uses advanced session verification, you cannot simply paste extracted links directly into a download manager (like IDM) without a browser handshake. Follow this workflow for a 100% success rate:
+## Basic Use
 
-### 1. Extraction
-1. Paste your list of `datanodes.to` URLs into the **Extraction** tab.
-2. Click **Start Extraction**.
-3. Watch the real-time terminal log as the engine negotiates the links.
-4. Once completed, click **Copy All Links**.
+1. Open the **Extraction** page.
+2. Paste supported links into the input box, one link per line.
+3. Click **Start Extraction**.
+4. Wait until links show **Ready** in the queue.
+5. Click **Copy Ready** to copy ready links.
+6. Open the copied links in your regular browser.
 
-### 2. Browser Handshake (Required)
-1. Install the **Internet Download Manager (IDM)** and its browser extension.
-2. Install the **"Open Multiple URLs"** extension in your browser.
-3. Open the extension, paste your links, and click **Open**.
-4. **Tip**: Open links in groups of 5-8 to ensure smooth token negotiation.
-5. Your browser will instantly verify the session, and IDM will automatically intercept the download!
+You can also click **Export Ready** to save the ready links as a text file.
 
----
+## Opening Many Ready Links
 
-## 🛠 Development
+If you have many ready links, a browser extension such as **Open Multiple URLs** can help.
 
-NodeXtract utilizes a hybrid architecture: a **React/Electron** frontend communicating via IPC with a **Python/Playwright** backend.
+Use it like this:
 
-### Setup
+1. Click **Copy Ready** in NodeXtract.
+2. Open the extension in your browser.
+3. Paste the copied links into the extension.
+4. Use the extension's open action.
+
+## Settings
+
+The Settings page includes:
+
+- **Appearance**: choose light or dark mode.
+- **Concurrency**: how many links the engine works on at the same time.
+- **Max retries**: how many times a failed link should be retried.
+- **Headless mode**: run the browser engine off-screen.
+- **Development engine**: available only in dev builds; switch between the Python script and packaged binary.
+
+Settings are saved locally and restored when the app opens again.
+
+## Development
+
+Install dependencies:
+
 ```bash
-# Install dependencies
 npm install
+```
 
-# Build the Python engine (Platform specific)
-npm run build:engine:mac  # or :win
+Build the Python engine for your platform:
 
-# Launch development environment
+```bash
+npm run build:engine:mac
+```
+
+or on Windows:
+
+```bash
+npm run build:engine:win
+```
+
+Start the dev app:
+
+```bash
 npm start
 ```
 
-### Production Build
+Create a packaged build:
+
 ```bash
-# Generate platform-specific installers
 npm run package
 ```
 
----
+## Project Structure
 
-## 💖 Support the Project
+- `src/main`: Electron main process, IPC, updater, engine process launch.
+- `src/renderer`: React UI.
+- `engine`: Python Playwright extraction engine.
+- `resources/bin`: packaged engine binary output.
+- `assets`: app icons and build resources.
 
-If NodeXtract has saved you time and frustration, consider supporting further development.
+## Support and Issues
 
-- **[GitHub Sponsors](https://github.com/sponsors/nasyx-rakeeb)**
+- GitHub: https://github.com/nasyx-rakeeb/NodeXtract
+- Report an issue: https://github.com/nasyx-rakeeb/NodeXtract/issues/new
+- GitHub Sponsors: https://github.com/sponsors/nasyx-rakeeb
 
----
+## Responsible Use
 
-**Disclaimer**: NodeXtract is a tool designed for automation. Users are responsible for adhering to the terms of service of the file hosts they interact with.
+Use NodeXtract only with links, files, and services you are authorized to access. You are responsible for following the terms, policies, and legal requirements that apply to the content and services you use with this app.

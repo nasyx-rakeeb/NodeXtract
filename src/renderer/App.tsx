@@ -13,6 +13,7 @@ import {
   Routes,
 } from 'react-router-dom';
 import type {
+  DevEngineMode,
   ElectronHandler,
   EngineHealth,
   LinkStatus,
@@ -42,12 +43,16 @@ interface CompletionSummary {
   total: number;
 }
 
+type ThemeMode = 'light' | 'dark';
+
 interface StoredSession {
   linksInput: string;
   links: LinkItem[];
   concurrency: number;
   retries: number;
   headless: boolean;
+  themeMode: ThemeMode;
+  devEngineMode: DevEngineMode;
   completionSummary: CompletionSummary | null;
 }
 
@@ -74,6 +79,10 @@ interface SettingsViewProps {
   setRetries: (value: number) => void;
   headless: boolean;
   setHeadless: (value: boolean) => void;
+  themeMode: ThemeMode;
+  setThemeMode: (value: ThemeMode) => void;
+  devEngineMode: DevEngineMode;
+  setDevEngineMode: (value: DevEngineMode) => void;
   isRunning: boolean;
   engineHealth: EngineHealth | null;
   refreshEngineHealth: () => void;
@@ -102,6 +111,7 @@ const fallbackIpcRenderer: ElectronHandler['ipcRenderer'] = {
         packaged: false,
         enginePath: '',
         engineExists: false,
+        engineMode: 'script',
         browserMode: 'playwright-chromium',
         browserNote: 'Engine health is unavailable outside Electron.',
       };
@@ -247,7 +257,7 @@ function Sidebar({
         <img src={logoIcon} alt="" className="brand-mark" />
         <div>
           <h1>NodeXtract</h1>
-          <p>Direct link resolver</p>
+          <p>Link workflow utility</p>
         </div>
       </div>
 
@@ -279,6 +289,15 @@ function Sidebar({
         >
           <span className="nav-glyph help" aria-hidden="true" />
           <span>Guide</span>
+        </NavLink>
+        <NavLink
+          to="/about"
+          className={({ isActive }) =>
+            isActive ? 'nav-item active' : 'nav-item'
+          }
+        >
+          <span className="nav-glyph about" aria-hidden="true" />
+          <span>About</span>
         </NavLink>
       </nav>
 
@@ -358,6 +377,7 @@ function ExtractionView({
   notify,
 }: ExtractionViewProps) {
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const lastReadyRowRef = useRef<HTMLTableRowElement | null>(null);
   const parsedCount = linksInput
     .split('\n')
     .map((link) => link.trim())
@@ -384,12 +404,55 @@ function ExtractionView({
     }
   }, [logs, isRunning]);
 
+  const lastReadyIndex = links.reduce(
+    (lastIndex, link, index) => (link.status === 'success' ? index : lastIndex),
+    -1,
+  );
+
+  useEffect(() => {
+    if (isRunning && lastReadyRowRef.current) {
+      lastReadyRowRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [lastReadyIndex, isRunning]);
+
+  const renderQueueResult = (link: LinkItem) => {
+    if (link.downloadUrl) {
+      return (
+        <a
+          href={link.downloadUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="download-link"
+        >
+          Ready Link
+        </a>
+      );
+    }
+
+    if (link.status === 'failed' && !isRunning) {
+      return (
+        <button
+          className="row-action"
+          type="button"
+          onClick={() => handleRetryLink(link.url)}
+        >
+          Retry
+        </button>
+      );
+    }
+
+    return <span className="error-text">{link.error || '-'}</span>;
+  };
+
   return (
     <div className="view-shell">
       <header className="topbar">
         <div>
           <p className="eyebrow">Extraction</p>
-          <h2>Resolve Datanodes links</h2>
+          <h2>Process supported links</h2>
         </div>
         <div className="run-state">
           <span className={`status-dot ${isRunning ? 'busy' : 'online'}`} />
@@ -452,7 +515,7 @@ function ExtractionView({
           <textarea
             value={linksInput}
             onChange={(event) => setLinksInput(event.target.value)}
-            placeholder="Paste datanodes.to URLs, one per line"
+            placeholder="Paste supported URLs, one per line"
             className="link-input"
             disabled={isRunning}
           />
@@ -489,15 +552,6 @@ function ExtractionView({
                 Retry Failed
               </button>
             )}
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={copySuccessLinks}
-              disabled={successCount === 0}
-            >
-              Copy Links
-            </button>
-
           </div>
         </div>
 
@@ -532,48 +586,58 @@ function ExtractionView({
         <div className="panel-header">
           <div>
             <p className="eyebrow">Queue</p>
-            <h3>Download handoff</h3>
+            <h3>Ready handoff</h3>
           </div>
-          <button
-            className="btn secondary compact"
-            type="button"
-            onClick={handleExportReady}
-            disabled={successCount === 0}
-          >
-            Export Ready
-          </button>
-          <button
-            className="btn secondary compact"
-            type="button"
-            onClick={copySuccessLinks}
-            disabled={successCount === 0}
-          >
-            Copy Ready
-          </button>
-          {!isRunning && failedCount > 0 && (
+          <div className="queue-actions">
             <button
               className="btn secondary compact"
               type="button"
-              onClick={handleRetryFailed}
+              onClick={handleExportReady}
+              disabled={successCount === 0}
             >
-              Retry Failed
+              Export Ready
             </button>
-          )}
+            <button
+              className="btn secondary compact"
+              type="button"
+              onClick={copySuccessLinks}
+              disabled={successCount === 0}
+            >
+              Copy Ready
+            </button>
+            {!isRunning && failedCount > 0 && (
+              <button
+                className="btn secondary compact"
+                type="button"
+                onClick={handleRetryFailed}
+              >
+                Retry Failed
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="table-container">
           <table>
+            <colgroup>
+              <col className="source-col-width" />
+              <col className="status-col-width" />
+              <col className="result-col-width" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Source URL</th>
                 <th>Status</th>
                 <th>Result</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {links.map((link) => (
-                <tr key={link.url} className={`row-status-${link.status}`}>
+              {links.map((link, index) => (
+                <tr
+                  key={link.url}
+                  ref={index === lastReadyIndex ? lastReadyRowRef : null}
+                  className={`row-status-${link.status}`}
+                >
                   <td className="url-col" title={link.url}>
                     {link.url}
                   </td>
@@ -582,38 +646,12 @@ function ExtractionView({
                       {getStatusLabel(link.status)}
                     </span>
                   </td>
-                  <td className="result-col">
-                    {link.downloadUrl ? (
-                      <a
-                        href={link.downloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="download-link"
-                      >
-                        Direct Link
-                      </a>
-                    ) : (
-                      <span className="error-text">{link.error || '-'}</span>
-                    )}
-                  </td>
-                  <td className="action-col">
-                    {link.status === 'failed' && !isRunning ? (
-                      <button
-                        className="row-action"
-                        type="button"
-                        onClick={() => handleRetryLink(link.url)}
-                      >
-                        Retry
-                      </button>
-                    ) : (
-                      <span className="muted-dash">-</span>
-                    )}
-                  </td>
+                  <td className="result-col">{renderQueueResult(link)}</td>
                 </tr>
               ))}
               {links.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="empty-table">
+                  <td colSpan={3} className="empty-table">
                     Paste supported links to build a queue.
                   </td>
                 </tr>
@@ -633,10 +671,16 @@ function SettingsView({
   setRetries,
   headless,
   setHeadless,
+  themeMode,
+  setThemeMode,
+  devEngineMode,
+  setDevEngineMode,
   isRunning,
   engineHealth,
   refreshEngineHealth,
 }: SettingsViewProps) {
+  const isDevBuild = engineHealth ? !engineHealth.packaged : false;
+
   return (
     <div className="view-shell narrow">
       <header className="topbar">
@@ -651,6 +695,29 @@ function SettingsView({
       </header>
 
       <section className="settings-panel">
+        <div className="setting-row">
+          <span>
+            <strong>Appearance</strong>
+            <small>Choose the interface theme</small>
+          </span>
+          <div className="segmented-control" role="group" aria-label="Theme">
+            <button
+              type="button"
+              className={themeMode === 'light' ? 'active' : ''}
+              onClick={() => setThemeMode('light')}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              className={themeMode === 'dark' ? 'active' : ''}
+              onClick={() => setThemeMode('dark')}
+            >
+              Dark
+            </button>
+          </div>
+        </div>
+
         <label className="setting-row" htmlFor="setting-concurrency">
           <span>
             <strong>Concurrency</strong>
@@ -709,6 +776,37 @@ function SettingsView({
             <span className="slider" />
           </span>
         </label>
+
+        {isDevBuild && (
+          <div className="setting-row">
+            <span>
+              <strong>Development engine</strong>
+              <small>Switch between source script and packaged binary</small>
+            </span>
+            <div
+              className="segmented-control wide"
+              role="group"
+              aria-label="Development engine"
+            >
+              <button
+                type="button"
+                className={devEngineMode === 'script' ? 'active' : ''}
+                onClick={() => setDevEngineMode('script')}
+                disabled={isRunning}
+              >
+                Script
+              </button>
+              <button
+                type="button"
+                className={devEngineMode === 'binary' ? 'active' : ''}
+                onClick={() => setDevEngineMode('binary')}
+                disabled={isRunning}
+              >
+                Binary
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="engine-health-panel">
@@ -727,14 +825,14 @@ function SettingsView({
         </div>
         <div className="health-grid">
           <div>
-            <span>Engine binary</span>
+            <span>Engine file</span>
             <strong className={engineHealth?.engineExists ? 'ok' : 'bad'}>
               {engineHealth?.engineExists ? 'Found' : 'Missing'}
             </strong>
           </div>
           <div>
-            <span>Browser mode</span>
-            <strong>Playwright Chromium</strong>
+            <span>Engine mode</span>
+            <strong>{engineHealth?.engineMode || devEngineMode}</strong>
           </div>
           <div>
             <span>Platform</span>
@@ -760,48 +858,55 @@ function HelpView() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Guide</p>
-          <h2>Browser handoff</h2>
+          <h2>How to use ready links</h2>
         </div>
       </header>
 
       <section className="guide-stack">
         <div className="guide-callout">
-          <h3>Direct links need a browser session first</h3>
+          <h3>What NodeXtract gives you</h3>
           <p>
-            Datanodes validates generated URLs against the browser session that
-            opened them. Open the ready links in your browser before your
-            download manager takes over.
+            NodeXtract prepares supported source URLs and returns ready links in
+            the queue. A ready link is meant to be opened in your regular
+            browser so the browser can continue the session-aware download
+            workflow.
           </p>
         </div>
 
         <div className="guide-tip">
-          <strong>Tip</strong>
+          <strong>Opening many links</strong>
           <p>
-            If you have many links, use a browser extension such as Open
-            Multiple URLs to open them in controlled batches.
+            If the queue has many ready links, install a browser extension such
+            as Open Multiple URLs. Copy the ready links from NodeXtract, paste
+            them into the extension, and use the extension open action.
           </p>
         </div>
 
         {[
           [
             '1',
-            'Extract',
-            'Paste supported URLs, run extraction, and wait for ready links.',
+            'Paste source links',
+            'Open Extraction, paste supported URLs into the input box, then click Start Extraction.',
           ],
           [
             '2',
-            'Copy',
-            'Use Copy Ready after the queue contains successful results.',
+            'Wait for Ready status',
+            'Watch the Queue section. Rows marked Ready have a prepared link available in the Result column.',
           ],
           [
             '3',
-            'Open',
-            'Open the copied links in your regular browser in small batches.',
+            'Copy or export',
+            'Use Copy Ready to place all ready links on the clipboard, or Export Ready to save them as a text file.',
           ],
           [
             '4',
-            'Download',
-            'Let the browser extension hand the verified downloads to your manager.',
+            'Open in your browser',
+            'Paste the copied ready links into your browser or into Open Multiple URLs, then open them.',
+          ],
+          [
+            '5',
+            'Continue normally',
+            'After the links open in your browser, let your usual browser or download tool handle the files.',
           ],
         ].map(([step, title, body]) => (
           <div className="guide-row" key={step}>
@@ -812,6 +917,84 @@ function HelpView() {
             </div>
           </div>
         ))}
+      </section>
+    </div>
+  );
+}
+
+function AboutView() {
+  return (
+    <div className="view-shell narrow">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">About</p>
+          <h2>NodeXtract</h2>
+        </div>
+      </header>
+
+      <section className="about-stack">
+        <div className="about-card">
+          <h3>Desktop link workflow utility</h3>
+          <p>
+            NodeXtract helps organize supported URL queues, run a local browser
+            preparation engine, and hand ready links back to your normal browser
+            workflow from a focused desktop interface.
+          </p>
+        </div>
+
+        <div className="about-card">
+          <h3>What it does</h3>
+          <ul className="about-list">
+            <li>
+              Processes supported links locally using a bundled browser engine.
+            </li>
+            <li>
+              Shows live queue states, engine logs, retries, and failed rows.
+            </li>
+            <li>Copies or exports ready links for browser handoff.</li>
+            <li>Checks for app updates in packaged builds.</li>
+          </ul>
+        </div>
+
+        <div className="about-card">
+          <h3>Responsible use</h3>
+          <p>
+            Use NodeXtract only with links, files, and services you are
+            authorized to access. You are responsible for following the terms,
+            policies, and legal requirements that apply to the content and
+            services you use with this app.
+          </p>
+        </div>
+
+        <div className="about-grid">
+          <a
+            className="about-link"
+            href="https://github.com/nasyx-rakeeb/NodeXtract"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>GitHub</span>
+            <strong>View source and releases</strong>
+          </a>
+          <a
+            className="about-link"
+            href="https://github.com/sponsors/nasyx-rakeeb"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>Support</span>
+            <strong>GitHub Sponsors</strong>
+          </a>
+          <a
+            className="about-link"
+            href="https://github.com/nasyx-rakeeb/NodeXtract/issues/new"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>Issues</span>
+            <strong>Report a bug or request</strong>
+          </a>
+        </div>
       </section>
     </div>
   );
@@ -835,10 +1018,16 @@ function MainApp() {
     message: 'Updates have not been checked yet.',
   });
   const [concurrency, setConcurrency] = useState(
-    storedSession?.concurrency || 5,
+    storedSession?.concurrency ?? 5,
   );
-  const [retries, setRetries] = useState(storedSession?.retries || 3);
-  const [headless, setHeadless] = useState(storedSession?.headless || false);
+  const [retries, setRetries] = useState(storedSession?.retries ?? 3);
+  const [headless, setHeadless] = useState(storedSession?.headless ?? true);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    storedSession?.themeMode || 'dark',
+  );
+  const [devEngineMode, setDevEngineMode] = useState<DevEngineMode>(
+    storedSession?.devEngineMode || 'script',
+  );
 
   const ipc = useMemo(
     () => window.electron?.ipcRenderer || fallbackIpcRenderer,
@@ -852,11 +1041,11 @@ function MainApp() {
 
   const refreshEngineHealth = useCallback(async () => {
     try {
-      setEngineHealth(await ipc.invoke('engine:get-health'));
+      setEngineHealth(await ipc.invoke('engine:get-health', { devEngineMode }));
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Engine health failed.');
     }
-  }, [ipc, notify]);
+  }, [devEngineMode, ipc, notify]);
 
   useEffect(() => {
     if (window.electron) {
@@ -865,17 +1054,32 @@ function MainApp() {
   }, [refreshEngineHealth]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+  }, [themeMode]);
+
+  useEffect(() => {
     const session: StoredSession = {
       linksInput,
       links,
       concurrency,
       retries,
       headless,
+      themeMode,
+      devEngineMode,
       completionSummary,
     };
 
     window.localStorage.setItem(sessionStorageKey, JSON.stringify(session));
-  }, [completionSummary, concurrency, headless, links, linksInput, retries]);
+  }, [
+    completionSummary,
+    concurrency,
+    devEngineMode,
+    headless,
+    links,
+    linksInput,
+    retries,
+    themeMode,
+  ]);
 
   useEffect(() => {
     const removeExtractionListener = ipc.on('extraction-event', (data) => {
@@ -950,10 +1154,12 @@ function MainApp() {
       .map((link) => link.trim())
       .filter(Boolean);
 
-    const validLinks = parsedLinks.filter((link) =>
+    const supportedLinks = parsedLinks.filter((link) =>
       link.includes('datanodes.to'),
     );
-    const invalidCount = parsedLinks.length - validLinks.length;
+    const validLinks = Array.from(new Set(supportedLinks));
+    const invalidCount = parsedLinks.length - supportedLinks.length;
+    const duplicateCount = supportedLinks.length - validLinks.length;
 
     if (validLinks.length === 0) {
       notify(
@@ -962,10 +1168,17 @@ function MainApp() {
       return;
     }
 
+    const cleanupMessages = [];
     if (invalidCount > 0) {
-      notify(
-        `Removed ${invalidCount} invalid link(s). NodeXtract only supports datanodes.to.`,
+      cleanupMessages.push(
+        `removed ${invalidCount} unsupported link(s); currently only datanodes.to links are supported`,
       );
+    }
+    if (duplicateCount > 0) {
+      cleanupMessages.push(`removed ${duplicateCount} duplicate link(s)`);
+    }
+    if (cleanupMessages.length > 0) {
+      notify(`Input cleaned: ${cleanupMessages.join(', ')}.`);
     }
 
     setLinks(validLinks.map((url) => ({ url, status: 'pending' })));
@@ -975,7 +1188,7 @@ function MainApp() {
 
     ipc.sendMessage('start-extraction', {
       links: validLinks,
-      config: { concurrency, retries, headless },
+      config: { concurrency, retries, headless, devEngineMode },
     });
   };
 
@@ -989,7 +1202,7 @@ function MainApp() {
 
     ipc.sendMessage('start-extraction', {
       links: targetLinks,
-      config: { concurrency, retries, headless },
+      config: { concurrency, retries, headless, devEngineMode },
     });
   };
 
@@ -1106,6 +1319,10 @@ function MainApp() {
               setRetries={setRetries}
               headless={headless}
               setHeadless={setHeadless}
+              themeMode={themeMode}
+              setThemeMode={setThemeMode}
+              devEngineMode={devEngineMode}
+              setDevEngineMode={setDevEngineMode}
               isRunning={isRunning}
               engineHealth={engineHealth}
               refreshEngineHealth={refreshEngineHealth}
@@ -1113,6 +1330,7 @@ function MainApp() {
           }
         />
         <Route path="/help" element={<HelpView />} />
+        <Route path="/about" element={<AboutView />} />
       </Routes>
     </AppChrome>
   );

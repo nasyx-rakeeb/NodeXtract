@@ -1,15 +1,14 @@
 {
   "name": "nodextract",
-  "version": "1.0.3",
-  "description": "An automated cross-platform direct download link extractor built with Playwright and Electron.",
+  "version": "1.0.4",
+  "description": "A cross-platform desktop utility for preparing supported file-host links.",
   "keywords": [
     "electron",
     "react",
     "playwright",
-    "datanodes",
-    "extractor",
     "automation",
-    "downloader"
+    "desktop",
+    "link-workflow"
   ],
   "homepage": "https://github.com/nasyx-rakeeb/NodeXtract#readme",
   "bugs": {
