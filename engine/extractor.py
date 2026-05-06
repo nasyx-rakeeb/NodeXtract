@@ -3,14 +3,22 @@ import urllib.parse
 import json
 import sys
 import os
+from pathlib import Path
 
-# Force Playwright to use the persistent global system cache
-# This prevents it from looking inside the ephemeral PyInstaller bundle folder
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+BROWSERS_PATH = Path.home() / ".nodextract" / "ms-playwright"
+
+# Keep Playwright browsers outside PyInstaller's temporary _MEI bundle folder.
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSERS_PATH)
 
 import argparse
 import subprocess
 from playwright.async_api import async_playwright
+
+
+def compact_error(error):
+    message = " ".join(str(error).split())
+    return message[:220] + "..." if len(message) > 220 else message
+
 
 class Logger:
     @staticmethod
@@ -49,7 +57,7 @@ class HostLinkHandler:
     def __init__(self, browser):
         self.browser = browser
 
-    async def process(self, link, seen):
+    async def process(self, link, seen, label):
         page = await self.browser.new_page()
         download_url = None
 
@@ -66,12 +74,13 @@ class HostLinkHandler:
         page.on("response", lambda r: asyncio.create_task(handle_response(r)))
 
         try:
-            Logger.log(f"[OPEN] {link}")
+            Logger.log(f"{label}: opening source page.")
             Logger.progress(link, "opening")
 
             await page.goto(link, wait_until="domcontentloaded")
             page.on("popup", lambda p: asyncio.create_task(p.close()))
 
+            Logger.log(f"{label}: completing browser verification.")
             Logger.progress(link, "verifying")
             await page.wait_for_selector(self.BUTTON_CONTINUE, timeout=40000, state="visible")
             await page.click(self.BUTTON_CONTINUE)
@@ -88,6 +97,7 @@ class HostLinkHandler:
             except Exception:
                 pass
 
+            Logger.log(f"{label}: waiting for the next available action.")
             Logger.progress(link, "waiting_free")
             await page.wait_for_selector(self.BUTTON_FREE, timeout=20000)
             await page.click(self.BUTTON_FREE)
@@ -100,10 +110,12 @@ class HostLinkHandler:
             await page.wait_for_selector(self.BUTTON_FREE, timeout=20000)
             await page.click(self.BUTTON_FREE)
 
+            Logger.log(f"{label}: starting the final handoff step.")
             Logger.progress(link, "waiting_start")
             await page.wait_for_selector(self.BUTTON_START, timeout=40000)
             await page.click(self.BUTTON_START)
 
+            Logger.log(f"{label}: capturing the ready link.")
             Logger.progress(link, "intercepting")
             await asyncio.sleep(5)
 
@@ -111,16 +123,16 @@ class HostLinkHandler:
                 clean_url = urllib.parse.unquote(download_url)
                 if clean_url not in seen:
                     seen.add(clean_url)
-                    Logger.log(f"[OK] {clean_url}")
+                    Logger.log(f"{label}: ready link captured.")
                     Logger.result(link, "success", download_url=clean_url)
                     return True
 
-            Logger.log("[FAIL] No URL captured", level="error")
+            Logger.log(f"{label}: no ready link was captured.", level="error")
             Logger.result(link, "failed", error="No URL captured")
             return False
 
         except Exception as e:
-            Logger.log(f"[ERROR] {link} -> {e}", level="error")
+            Logger.log(f"{label}: failed - {compact_error(e)}", level="error")
             Logger.result(link, "failed", error=str(e))
             return False
 
@@ -138,51 +150,82 @@ class ExtractorEngine:
     @staticmethod
     def ensure_browsers_installed():
         try:
-            Logger.log("Checking browser dependencies (may take a minute on first run)...")
+            Logger.log("Installing browser runtime. This can take a minute on first setup.")
             from playwright._impl._driver import compute_driver_executable, get_driver_env
             driver_executable, cli_js = compute_driver_executable()
+            BROWSERS_PATH.mkdir(parents=True, exist_ok=True)
             env = get_driver_env()
-            subprocess.check_call([driver_executable, cli_js, "install", "chromium"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            Logger.log("Browser dependencies verified.")
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSERS_PATH)
+            subprocess.check_call(
+                [driver_executable, cli_js, "install", "chromium", "chromium-headless-shell"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            Logger.log("Browser runtime is ready.")
         except Exception as e:
-            Logger.log(f"Failed to verify browsers: {e}", level="warning")
+            Logger.log(f"Browser runtime setup failed: {compact_error(e)}", level="warning")
+            raise
+
+    async def launch_browser(self, playwright):
+        try:
+            Logger.log("Starting browser engine.")
+            browser = await playwright.chromium.launch(headless=self.headless)
+            Logger.log("Browser engine started.")
+            return browser
+        except Exception as e:
+            Logger.log(
+                f"Browser engine was not ready: {compact_error(e)}",
+                level="warning",
+            )
+            await asyncio.to_thread(self.ensure_browsers_installed)
+            Logger.log("Retrying browser engine startup.")
+            browser = await playwright.chromium.launch(headless=self.headless)
+            Logger.log("Browser engine started.")
+            return browser
 
     async def worker(self, browser, queue):
         handler = HostLinkHandler(browser)
         while True:
-            link = await queue.get()
-            if link is None:
+            item = await queue.get()
+            if item is None:
                 break
 
+            link = item["link"]
+            label = f"Link {item['index']}/{item['total']}"
+
             success = False
-            for attempt in range(1, self.max_retries + 2):
-                Logger.log(f"[TRY {attempt}] {link}")
+            attempt_count = self.max_retries + 1
+            for attempt in range(1, attempt_count + 1):
+                Logger.log(f"{label}: attempt {attempt}/{attempt_count}.")
                 Logger.progress(link, f"attempt_{attempt}", attempt=attempt)
 
-                success = await handler.process(link, self.seen)
+                success = await handler.process(link, self.seen, label)
                 if success:
                     break
 
                 wait_time = attempt * 2
-                Logger.log(f"[RETRY WAIT] {wait_time}s")
-                await asyncio.sleep(wait_time)
+                if attempt < attempt_count:
+                    Logger.log(f"{label}: retrying in {wait_time}s.")
+                    await asyncio.sleep(wait_time)
 
             if not success:
-                Logger.log(f"[GAVE UP] {link}", level="error")
+                Logger.log(f"{label}: all attempts failed.", level="error")
 
             queue.task_done()
 
     async def run(self, links):
-        self.ensure_browsers_installed()
-        
         queue = asyncio.Queue()
-        for link in links:
-            queue.put_nowait(link)
+        total = len(links)
+        for index, link in enumerate(links, 1):
+            queue.put_nowait({"index": index, "total": total, "link": link})
 
-        Logger.log("Starting Playwright...")
+        Logger.log(
+            f"Preparing extraction for {total} link(s) with concurrency {self.concurrency}."
+        )
         
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
+            browser = await self.launch_browser(p)
             tasks = [asyncio.create_task(self.worker(browser, queue)) for _ in range(self.concurrency)]
             
             await queue.join()
@@ -191,7 +234,7 @@ class ExtractorEngine:
             await asyncio.gather(*tasks)
             await browser.close()
                 
-        Logger.log("DONE \u2192 Extraction finished")
+        Logger.log("Extraction finished.")
         Logger.emit("done")
 
 

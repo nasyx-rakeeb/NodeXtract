@@ -1181,6 +1181,7 @@ function MainApp() {
       notify(`Input cleaned: ${cleanupMessages.join(', ')}.`);
     }
 
+    setLinksInput(validLinks.join('\n'));
     setLinks(validLinks.map((url) => ({ url, status: 'pending' })));
     setLogs([]);
     setCompletionSummary(null);
@@ -1281,6 +1282,16 @@ function MainApp() {
     setIsRunning(false);
   };
 
+  const handleLinksInputChange = (value: string) => {
+    setLinksInput(value);
+
+    if (!isRunning) {
+      setLinks([]);
+      setLogs([]);
+      setCompletionSummary(null);
+    }
+  };
+
   return (
     <AppChrome
       notice={notice}
@@ -1294,7 +1305,7 @@ function MainApp() {
           element={
             <ExtractionView
               linksInput={linksInput}
-              setLinksInput={setLinksInput}
+              setLinksInput={handleLinksInputChange}
               links={links}
               logs={logs}
               isRunning={isRunning}
